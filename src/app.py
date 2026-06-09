@@ -10,11 +10,9 @@ import datetime
 import numpy as np
 import traceback
 from flask import Flask, request, jsonify, send_from_directory
-from data.market_data import AssetPriceOracle # Pointing to your specific data folder
+from data.market_data import AssetPriceOracle
 from quant.swap_legs import InterestRateLeg, AssetReturnLeg
 
-
-# Ensure that the 'src' directory (or current directory) is in the python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
@@ -31,6 +29,7 @@ from quant.currency_swap_pricer import CurrencySwapPricer
 
 app = Flask(__name__, static_folder='web', static_url_path='')
 
+
 def resolve_liquidity_overlaps(market_data_records, curve_type, trade_date, day_count_convention, config):
     """
     Scans the market data records for instruments that have overlapping maturity dates.
@@ -38,80 +37,60 @@ def resolve_liquidity_overlaps(market_data_records, curve_type, trade_date, day_
     with the higher liquidity (lower Spread in bps).
     Sets 'skipped' and 'skipped_reason' on the rejected records.
     """
-    # Create helper instance just to use tenor parsing
     if curve_type == 'Treasury':
         builder = TreasuryCurveBuilder([], config)
     else:
         builder = FuturesCurveBuilder([], config)
-        
+
     records_with_t = []
     for idx, rec in enumerate(market_data_records):
         inst = rec['Instrument']
         tenor = rec['Tenor']
-        
+
         try:
             if curve_type == 'Treasury':
                 mat_date = builder._tenor_to_date(tenor)
             else:
                 if inst in ['Cash', 'Swap']:
                     mat_date = builder._tenor_to_date(tenor)
-                else: # Future
+                else:
                     _, mat_date = builder._parse_imm_future(tenor)
-            
+
             t = calculate_year_fraction(trade_date, mat_date, day_count_convention)
-            
-            # Read spread or default to 9999.0 (highest illiquidity)
             spread_val = rec.get('Spread')
             spread = float(spread_val) if spread_val is not None else 9999.0
-            
-            records_with_t.append({
-                'index': idx,
-                'record': rec,
-                't': t,
-                'spread': spread
-            })
+
+            records_with_t.append({'index': idx, 'record': rec, 't': t, 'spread': spread})
         except Exception:
-            # If date parsing fails, skip overlap check for this record (it will fail in standard build validation anyway)
             continue
-            
-    # Sort records by maturity time
+
     records_with_t.sort(key=lambda x: x['t'])
-    
-    # Flag to skip overlaps
+
     skipped_indices = {}
-    overlap_threshold = 0.05 # ~18 days window for maturity overlap
-    
+    overlap_threshold = 0.05
+
     i = 0
     while i < len(records_with_t):
         j = i + 1
         overlaps = [records_with_t[i]]
-        
-        # Collect all records that overlap with the current one within the threshold
+
         while j < len(records_with_t) and (records_with_t[j]['t'] - records_with_t[i]['t']) < overlap_threshold:
             overlaps.append(records_with_t[j])
             j += 1
-            
+
         if len(overlaps) > 1:
-            # Sort overlaps by spread (lowest spread first = most liquid)
             overlaps.sort(key=lambda x: x['spread'])
             winner = overlaps[0]
-            
-            # Reject all others
+
             for loser in overlaps[1:]:
-                loser_inst = loser['record']['Instrument']
-                loser_tenor = loser['record']['Tenor']
-                winner_inst = winner['record']['Instrument']
-                winner_tenor = winner['record']['Tenor']
-                
                 skipped_indices[loser['index']] = (
-                    f"Skipped (Overlap with {winner_inst} {winner_tenor}; "
+                    f"Skipped (Overlap with {winner['record']['Instrument']} {winner['record']['Tenor']}; "
                     f"spread {loser['spread']} bps > {winner['spread']} bps)"
                 )
             i = j
         else:
             i += 1
-            
-    # Apply results back to the original records list
+
     for idx, rec in enumerate(market_data_records):
         if idx in skipped_indices:
             rec['skipped'] = True
@@ -119,7 +98,7 @@ def resolve_liquidity_overlaps(market_data_records, curve_type, trade_date, day_
         else:
             rec['skipped'] = False
             rec['skipped_reason'] = None
-            
+
     return market_data_records
 
 
@@ -127,21 +106,21 @@ def resolve_liquidity_overlaps(market_data_records, curve_type, trade_date, day_
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
+
 @app.route('/api/calculate', methods=['POST'])
 def calculate():
     try:
         req_data = request.get_json() or {}
-        
+
         # 1. Parse configuration
         config_data = req_data.get('config', {})
-        curve_type = config_data.get('curve_type', 'OIS') # 'OIS' or 'Treasury'
+        curve_type = config_data.get('curve_type', 'OIS')
         trade_date_str = config_data.get('trade_date', '28-05-2026')
         day_count_convention = config_data.get('day_count_convention', 'ACT/365')
         payment_frequency = int(config_data.get('payment_frequency', 2))
         interpolation_method = config_data.get('interpolation_method', 'Cubic Spline')
         futures_cutoff_years = float(config_data.get('futures_cutoff_years', 2.0))
-        
-        # Parse trade date to datetime.date
+
         try:
             trade_date = datetime.datetime.strptime(trade_date_str, "%d-%m-%Y").date()
         except ValueError:
@@ -149,8 +128,7 @@ def calculate():
                 'success': False,
                 'error': f"Invalid Trade Date format: '{trade_date_str}'. Expected DD-MM-YYYY."
             }), 400
-            
-        # Clean config dictionary
+
         config = {
             'trade_date': trade_date_str,
             'day_count_convention': day_count_convention,
@@ -158,7 +136,7 @@ def calculate():
             'interpolation_method': interpolation_method,
             'futures_cutoff_years': futures_cutoff_years
         }
-        
+
         # 2. Parse and validate market data
         market_data_raw = req_data.get('market_data', [])
         if not market_data_raw:
@@ -166,13 +144,12 @@ def calculate():
                 'success': False,
                 'error': 'Market data is empty. Please load or add at least one instrument.'
             }), 400
-            
+
         market_data_records = []
         for idx, row in enumerate(market_data_raw):
             inst = row.get('Instrument', '').strip().capitalize()
             tenor = row.get('Tenor', '').strip().upper()
-            
-            # Parse Spread optionally
+
             spread_val = row.get('Spread')
             spread = None
             if spread_val is not None and str(spread_val).strip() != '':
@@ -183,21 +160,20 @@ def calculate():
                         'success': False,
                         'error': f"Row {idx + 1} ({tenor}): Spread must be a valid number. Got '{spread_val}'"
                     }), 400
-            
+
             if curve_type == 'Treasury':
-                # Treasury curve validation
                 if not inst or inst not in ['Bill', 'Note', 'Bond']:
                     return jsonify({
                         'success': False,
                         'error': f"Row {idx + 1}: Instrument must be 'Bill', 'Note', or 'Bond' for Treasury Curve. Got '{inst}'"
                     }), 400
-                    
+
                 if not tenor:
                     return jsonify({
                         'success': False,
                         'error': f"Row {idx + 1}: Tenor must be specified (e.g., '3M', '2Y', '10Y')."
                     }), 400
-                    
+
                 price_val = row.get('Price')
                 try:
                     price = float(price_val)
@@ -206,7 +182,7 @@ def calculate():
                         'success': False,
                         'error': f"Row {idx + 1} ({tenor}): Price must be a valid number. Got '{price_val}'"
                     }), 400
-                    
+
                 coupon_val = row.get('Coupon', 0.0)
                 if coupon_val == '' or coupon_val is None:
                     coupon = 0.0
@@ -218,7 +194,7 @@ def calculate():
                             'success': False,
                             'error': f"Row {idx + 1} ({tenor}): Coupon must be a valid number. Got '{coupon_val}'"
                         }), 400
-                        
+
                 market_data_records.append({
                     'Instrument': inst,
                     'Tenor': tenor,
@@ -227,26 +203,25 @@ def calculate():
                     'Spread': spread
                 })
             else:
-                # OIS curve validation
                 if not inst or inst not in ['Cash', 'Future', 'Swap']:
                     return jsonify({
                         'success': False,
                         'error': f"Row {idx + 1}: Instrument must be 'Cash', 'Future', or 'Swap' for OIS Curve. Got '{inst}'"
                     }), 400
-                    
+
                 if not tenor:
                     return jsonify({
                         'success': False,
                         'error': f"Row {idx + 1}: Tenor must be specified (e.g., 'O/N', '1M', 'SR3M6')."
                     }), 400
-                    
+
                 quote_type = row.get('QuoteType', '').strip().upper()
                 if not quote_type or quote_type not in ['RATE', 'PRICE']:
                     return jsonify({
                         'success': False,
                         'error': f"Row {idx + 1}: QuoteType must be 'RATE' or 'PRICE'."
                     }), 400
-                    
+
                 quote_val = row.get('Quote')
                 try:
                     quote = float(quote_val)
@@ -255,7 +230,7 @@ def calculate():
                         'success': False,
                         'error': f"Row {idx + 1} ({tenor}): Quote value must be a valid number. Got '{quote_val}'"
                     }), 400
-                    
+
                 market_data_records.append({
                     'Instrument': inst,
                     'Tenor': tenor,
@@ -264,7 +239,7 @@ def calculate():
                     'Spread': spread
                 })
 
-        # 3. Resolve maturity overlaps using the Liquidity Auto-Selector
+        # 3. Resolve maturity overlaps
         market_data_records = resolve_liquidity_overlaps(
             market_data_records=market_data_records,
             curve_type=curve_type,
@@ -272,8 +247,7 @@ def calculate():
             day_count_convention=day_count_convention,
             config=config
         )
-        
-        # Filter active instruments for builders
+
         active_records = [r for r in market_data_records if not r.get('skipped', False)]
         if not active_records:
             return jsonify({
@@ -286,12 +260,11 @@ def calculate():
             builder = TreasuryCurveBuilder(market_data=active_records, config=config)
         else:
             builder = FuturesCurveBuilder(market_data=active_records, config=config)
-            
-        discount_factors = builder.build_curve()
-        
-        # --- MULTI-SWAP PORTFOLIO PRICING LOGIC ---
-        portfolio_data = req_data.get('portfolio', [])
 
+        builder.build_curve()
+
+        # 5. Portfolio pricing
+        portfolio_data = req_data.get('portfolio', [])
         print("RAW PORTFOLIO PAYLOAD:", portfolio_data)
 
         if isinstance(portfolio_data, dict):
@@ -300,16 +273,14 @@ def calculate():
             portfolio_data = []
 
         portfolio_results = None
-        
-        # NEW: We need a dedicated list to hold the formatted tuples for the CashflowEngine
         portfolio_tuples_for_engine = []
+        asset_details_out = []  # MERGE (cross-asset): per-asset price details (multi-position)
 
         if portfolio_data:
             pricer = SwapPricer(builder)
-
             total_base_npv = 0.0
             total_bumped_npv = 0.0
-            priced_count = 0 
+            priced_count = 0
 
             for idx, pos in enumerate(portfolio_data):
                 try:
@@ -326,37 +297,85 @@ def calculate():
 
                 is_payer = (position == 'payer')
                 maturity_date = builder.trade_date + datetime.timedelta(days=tenor_years * 365)
+                ticker = str(pos.get('ticker', '')).strip().upper()
 
-                # 1. BUILD THE SWAP LEG OBJECTS
-                fixed_leg = InterestRateLeg(
-                    notional=notional, 
-                    rate_type='fixed', 
-                    frequency=payment_frequency, 
-                    fixed_rate=fixed_rate
-                )
-                
-                float_leg = InterestRateLeg(
-                    notional=notional, 
-                    rate_type='float', 
-                    frequency=payment_frequency
-                )
+                if ticker:
+                    # === MERGE (cross-asset / Lifetime PnL): per-position Asset
+                    # Trade Date + Present Date, one historical-fixings fetch, and
+                    # the hybrid AssetReturnLeg. Requires the matching swap_legs.py
+                    # and market_data.py versions. The else: IR path is unchanged. =
+                    asset_trade_date = str(pos.get('asset_trade_date', '')).strip()
+                    present_date = str(pos.get('present_date', '')).strip()
+                    asset_class = str(pos.get('asset_class', 'auto')).strip().lower() or 'auto'
+                    pos_freq = int(float(pos.get('frequency', payment_frequency) or payment_frequency))
 
-                # 2. ASSIGN PAYING/RECEIVING BASED ON POSITION
-                if is_payer:
+                    # Parse DD-MM-YYYY (UI) -> datetime.date, with sane fallbacks.
+                    def _to_date(d, fallback):
+                        if not d:
+                            return fallback
+                        try:
+                            return datetime.datetime.strptime(d, "%d-%m-%Y").date()
+                        except ValueError:
+                            try:
+                                return datetime.date.fromisoformat(d)
+                            except ValueError:
+                                return fallback
+
+                    trade_dt = _to_date(asset_trade_date, builder.trade_date)
+                    present_dt = _to_date(present_date, datetime.date.today())
+                    if present_dt < trade_dt:
+                        present_dt = trade_dt  # guard against inverted ranges
+
+                    try:
+                        asset_data = AssetPriceOracle.get_asset_info(
+                            ticker, trade_dt.isoformat(), present_dt.isoformat()
+                        )
+                        historical_prices = AssetPriceOracle.get_historical_fixings(
+                            ticker, trade_dt, present_dt
+                        )
+                    except ValueError as oracle_err:
+                        print(f"Portfolio row {idx + 1}: Oracle failed for '{ticker}' -> {oracle_err}")
+                        return jsonify({'success': False, 'error': f"Invalid ticker '{ticker}': {oracle_err}"}), 400
+
+                    fixed_leg = InterestRateLeg(notional=notional, rate_type='fixed', frequency=pos_freq, fixed_rate=fixed_rate)
+                    asset_leg = AssetReturnLeg(
+                        notional=notional,
+                        ticker=asset_data["ticker"],
+                        initial_price=asset_data["initial_price"],
+                        current_price=asset_data["current_price"],
+                        dividend_yield=asset_data["dividend_yield"],
+                        asset_trade_date=trade_dt,
+                        present_date=present_dt,
+                        tenor_years=tenor_years,
+                        frequency=pos_freq,
+                        historical_prices=historical_prices,
+                        asset_class=asset_class,
+                    )
                     paying_leg = fixed_leg
-                    receiving_leg = float_leg
+                    receiving_leg = asset_leg
+                    portfolio_tuples_for_engine.append((asset_leg, tenor_years, is_payer))
+
+                    asset_details_out.append({
+                        "ticker": asset_data["ticker"],
+                        "initial_price": round(float(asset_data["initial_price"]), 4),
+                        "current_price": round(float(asset_data["current_price"]), 4),
+                        "dividend_yield": round(float(asset_data["dividend_yield"]), 6),
+                    })
+                    # === END MERGE ===========================================
                 else:
-                    paying_leg = float_leg
-                    receiving_leg = fixed_leg
+                    # Standard IR swap: fixed leg vs float leg
+                    fixed_leg = InterestRateLeg(notional=notional, rate_type='fixed', frequency=payment_frequency, fixed_rate=fixed_rate)
+                    float_leg = InterestRateLeg(notional=notional, rate_type='float', frequency=payment_frequency)
 
-                # 3. PREP DATA FOR CASHFLOW ENGINE
-                # The engine expects tuples of: (SwapLeg, tenor_years, is_payer)
-                # We package the fixed leg here, as it drives the primary cashflow schedule
-                portfolio_tuples_for_engine.append((fixed_leg, tenor_years, is_payer))
+                    if is_payer:
+                        paying_leg = fixed_leg
+                        receiving_leg = float_leg
+                    else:
+                        paying_leg = float_leg
+                        receiving_leg = fixed_leg
+                    portfolio_tuples_for_engine.append((fixed_leg, tenor_years, is_payer))
 
-                # 4. PRICE THE SWAP
                 try:
-                    # Pass the OBJECTS to the pricer, not the raw numbers
                     results = pricer.calculate_dv01(paying_leg, receiving_leg, maturity_date)
                 except Exception as price_err:
                     print(f"Portfolio row {idx + 1}: pricing failed -> {price_err}")
@@ -373,42 +392,41 @@ def calculate():
                     "base_npv": round(total_base_npv, 2),
                     "bumped_npv": round(total_bumped_npv, 2),
                     "pvbp": round(net_pvbp, 2),
-                    "positions_priced": priced_count
+                    "positions_priced": priced_count,
+                    "asset_details": asset_details_out or None,  # MERGE (cross-asset): None for pure IR
                 }
 
         print("COMPUTED PORTFOLIO RESULTS:", portfolio_results)
 
-        # --- PORTFOLIO CASHFLOW TIMESERIES ---
+        # 6. Portfolio cashflow timeseries
         cashflow_timeseries = []
         try:
             engine = CashflowEngine(builder)
-            # Pass our nicely formatted list of tuples to the engine, NOT the raw JSON
             cashflow_timeseries = engine.generate_portfolio_cashflows(portfolio_tuples_for_engine)
         except Exception as cf_err:
             print(f"Cashflow engine failed: {cf_err}")
-            cashflow_timeseries = []
-        # 5. Generate results knots for output display (evaluating both active & skipped)
+
+        # 7. Generate curve knots for output display
         knots = []
         for item in market_data_records:
             inst = item['Instrument']
             tenor = item['Tenor']
             skipped = item.get('skipped', False)
             skipped_reason = item.get('skipped_reason')
-            
+
             try:
                 if curve_type == 'Treasury':
                     mat_date = builder._tenor_to_date(tenor)
                 else:
                     if inst in ['Cash', 'Swap']:
                         mat_date = builder._tenor_to_date(tenor)
-                    else: # Future
+                    else:
                         _, mat_date = builder._parse_imm_future(tenor)
-                        
+
                 t = calculate_year_fraction(builder.trade_date, mat_date, builder.convention)
                 df = builder._get_discount_factor(t)
                 zero_rate = 0.0 if t == 0 else (-np.log(df) / t) * 100.0
-                
-                # Check OIS cutoff rules on active nodes
+
                 if curve_type == 'OIS' and not skipped:
                     if inst == 'Future' and t > builder.futures_cutoff_years + 0.1:
                         skipped = True
@@ -416,7 +434,7 @@ def calculate():
                     elif inst == 'Swap' and t <= builder.futures_cutoff_years + 0.1:
                         skipped = True
                         skipped_reason = f"Skipped (Swap overlaps with futures within {builder.futures_cutoff_years}Y cutoff)"
-                
+
                 knot_info = {
                     'instrument': inst,
                     'tenor': tenor,
@@ -427,24 +445,20 @@ def calculate():
                     'skipped': skipped,
                     'skipped_reason': skipped_reason
                 }
-                
+
                 if curve_type == 'Treasury':
                     knot_info['price'] = item['Price']
                     knot_info['coupon'] = item['Coupon']
                 else:
                     knot_info['quote_type'] = item['QuoteType']
                     knot_info['quote'] = item['Quote']
-                    
+
                 if item.get('Spread') is not None:
                     knot_info['spread'] = item['Spread']
-                    
+
                 knots.append(knot_info)
             except Exception as e:
-                knot_err = {
-                    'instrument': inst,
-                    'tenor': tenor,
-                    'error': str(e)
-                }
+                knot_err = {'instrument': inst, 'tenor': tenor, 'error': str(e)}
                 if curve_type == 'Treasury':
                     knot_err['price'] = item['Price']
                     knot_err['coupon'] = item['Coupon']
@@ -453,40 +467,33 @@ def calculate():
                     knot_err['quote'] = item['Quote']
                 knots.append(knot_err)
 
-        # Sort knots by year fraction
         knots.sort(key=lambda x: x.get('t', 9999.0))
-        
-        # 6. Interpolate smooth curve points for visualization
+
+        # 8. Interpolate smooth curve for visualization
         valid_knots = [k for k in knots if 'error' not in k and not k.get('skipped', False) and k.get('t', 0.0) > 0]
         if len(valid_knots) < 1:
             return jsonify({
                 'success': False,
                 'error': 'No active instruments remaining after applying filters and cutoff rules.'
             }), 400
-            
+
         times = np.array([k['t'] for k in valid_knots])
         dfs = np.array([k['df'] for k in valid_knots])
         rates = np.array([k['zero_rate'] for k in valid_knots])
-        
-        min_time = float(times.min())
+
+        min_time = max(float(times.min()), 0.0001)
         max_time = float(times.max())
-        
-        if min_time <= 0:
-            min_time = 0.0001
-            
         times_smooth = np.linspace(min_time, max_time, 200)
-        
-        zero_rates_smooth = []
-        dfs_smooth = []
-        
+
+        df_spline = None  # MERGE-FIX: define so the forward-rate block below can reuse it
         if interpolation_method == 'Cubic Spline' and len(times) >= 3:
             try:
                 zero_spline = CubicSplineCurve(times, rates)
-                zero_rates_smooth = zero_spline.evaluate(times_smooth).tolist()
-                
                 df_spline = CubicSplineCurve(times, dfs)
+                zero_rates_smooth = zero_spline.evaluate(times_smooth).tolist()
                 dfs_smooth = df_spline.evaluate(times_smooth).tolist()
-            except Exception as spline_err:
+            except Exception:
+                df_spline = None
                 interpolation_method = 'Linear (Fallback)'
                 zero_rates_smooth = np.interp(times_smooth, times, rates).tolist()
                 dfs_smooth = np.interp(times_smooth, times, dfs).tolist()
@@ -569,7 +576,7 @@ def calculate():
                 'method': interpolation_method
             }
         })
-        
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({
@@ -914,6 +921,7 @@ def calculate_currency_swap():
             'success': False,
             'error': f"Currency swap calculation error: {str(e)}"
         }), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
