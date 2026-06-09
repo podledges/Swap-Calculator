@@ -21,6 +21,12 @@ const downloadTemplateBtn = document.getElementById('download-template');
 const loadSampleBtn = document.getElementById('load-sample');
 const showZeroRateBtn = document.getElementById('show-zero-rate');
 const showDfBtn = document.getElementById('show-df');
+const showForwardRateBtn = document.getElementById('show-forward-rate');
+const showKnotsTableBtn = document.getElementById('show-knots-table');
+const showForwardsTableBtn = document.getElementById('show-forwards-table');
+const knotsTableWrapper = document.getElementById('knots-table-wrapper');
+const forwardsTableWrapper = document.getElementById('forwards-table-wrapper');
+const forwardsTableBody = document.getElementById('forwards-table-body');
 const exportResultsBtn = document.getElementById('export-results');
 const curveTypeSelect = document.getElementById('curve-type');
 
@@ -702,6 +708,7 @@ calculateBtn.addEventListener('click', async () => {
             
             resultsContainer.style.display = 'grid';
             renderOutputTable();
+            renderForwardRatesTable();
             renderCharts();
             
             if (data.portfolio_results) {
@@ -789,11 +796,32 @@ function renderOutputTable() {
     });
 }
 
+// Render Forward Rates Table
+function renderForwardRatesTable() {
+    if (!forwardsTableBody) return;
+    forwardsTableBody.innerHTML = '';
+    
+    if (!calculationResults || !calculationResults.forward_rates_table) return;
+    
+    calculationResults.forward_rates_table.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${row.period}</strong></td>
+            <td>${row.start_date}</td>
+            <td>${row.end_date}</td>
+            <td>${row.dt.toFixed(4)}</td>
+            <td><span class="rate-value" style="font-family: monospace; font-weight: 600; color: #ec4899;">${row.forward_rate.toFixed(4)}%</span></td>
+        `;
+        forwardsTableBody.appendChild(tr);
+    });
+}
+
 showZeroRateBtn.addEventListener('click', () => {
     if (currentChartType === 'zero_rate') return;
     currentChartType = 'zero_rate';
     showZeroRateBtn.classList.add('active');
     showDfBtn.classList.remove('active');
+    if (showForwardRateBtn) showForwardRateBtn.classList.remove('active');
     renderCharts();
 });
 
@@ -802,8 +830,37 @@ showDfBtn.addEventListener('click', () => {
     currentChartType = 'discount_factor';
     showDfBtn.classList.add('active');
     showZeroRateBtn.classList.remove('active');
+    if (showForwardRateBtn) showForwardRateBtn.classList.remove('active');
     renderCharts();
 });
+
+if (showForwardRateBtn) {
+    showForwardRateBtn.addEventListener('click', () => {
+        if (currentChartType === 'forward_rate') return;
+        currentChartType = 'forward_rate';
+        showForwardRateBtn.classList.add('active');
+        showZeroRateBtn.classList.remove('active');
+        showDfBtn.classList.remove('active');
+        renderCharts();
+    });
+}
+
+// Toggle Curve Nodes & Forward Rate Tables
+if (showKnotsTableBtn && showForwardsTableBtn) {
+    showKnotsTableBtn.addEventListener('click', () => {
+        showKnotsTableBtn.classList.add('active');
+        showForwardsTableBtn.classList.remove('active');
+        if (knotsTableWrapper) knotsTableWrapper.style.display = 'block';
+        if (forwardsTableWrapper) forwardsTableWrapper.style.display = 'none';
+    });
+    
+    showForwardsTableBtn.addEventListener('click', () => {
+        showKnotsTableBtn.classList.remove('active');
+        showForwardsTableBtn.classList.add('active');
+        if (knotsTableWrapper) knotsTableWrapper.style.display = 'none';
+        if (forwardsTableWrapper) forwardsTableWrapper.style.display = 'block';
+    });
+}
 
 // ==========================================
 // DYNAMIC PORTFOLIO TABLE LOGIC
@@ -965,7 +1022,7 @@ function renderCharts() {
         knotData = knots.map(k => ({ x: k.t, y: k.zero_rate, label: k.tenor }));
         lineColor = '#3b82f6'; // Neon Blue
         knotColor = '#06b6d4'; // Cyan
-    } else {
+    } else if (currentChartType === 'discount_factor') {
         chartTitle = `Discount Factor Curve (${curves.method} Interpolated)`;
         curveLabel = 'Smoothed Discount Factor';
         yLabel = 'Discount Factor D(0, T)';
@@ -973,6 +1030,26 @@ function renderCharts() {
         knotData = knots.map(k => ({ x: k.t, y: k.df, label: k.tenor }));
         lineColor = '#10b981'; // Emerald Green
         knotColor = '#f59e0b'; // Amber Gold
+    } else if (currentChartType === 'forward_rate') {
+        chartTitle = `Implied Forward Rate Curve`;
+        curveLabel = 'Smoothed Forward Rate';
+        yLabel = 'Continuous Forward Rate (%)';
+        smoothData = curves.times.map((t, idx) => ({ x: t, y: curves.forward_rates[idx] }));
+        
+        // Knot data shows the implied forward rates between consecutive knots, plotted at period midpoints
+        knotData = [];
+        if (calculationResults && calculationResults.forward_rates_table) {
+            calculationResults.forward_rates_table.forEach(item => {
+                const k_start = knots.find(k => k.tenor === item.start_tenor);
+                const k_end = knots.find(k => k.tenor === item.end_tenor);
+                const t_start = k_start ? k_start.t : 0.0;
+                const t_end = k_end ? k_end.t : 0.0;
+                const x_val = (t_start + t_end) / 2.0;
+                knotData.push({ x: x_val, y: item.forward_rate, label: item.period });
+            });
+        }
+        lineColor = '#ec4899'; // Neon Pink
+        knotColor = '#8b5cf6'; // Violet / Purple
     }
     
     // Add t=0 endpoint for Discount Factor (which always equals 1.0)
@@ -1097,23 +1174,38 @@ function renderCharts() {
 
 // Export Knots Output as CSV
 exportResultsBtn.addEventListener('click', () => {
-    if (!calculationResults || !calculationResults.knots) return;
+    if (!calculationResults) return;
     
-    let csvContent = "Instrument,Tenor,Quote,MaturityDate,TimeInYears,DiscountFactor,ZeroRate\n";
+    const isForwardsActive = showForwardsTableBtn && showForwardsTableBtn.classList.contains('active');
     
-    calculationResults.knots.forEach(k => {
-        if (k.error) return; // skip errors
-        const dfVal = k.df !== undefined ? k.df : '';
-        const zeroVal = k.zero_rate !== undefined ? k.zero_rate : '';
-        const matVal = k.maturity_date || '';
-        csvContent += `${k.instrument},${k.tenor},${k.quote},${matVal},${k.t},${dfVal},${zeroVal}\n`;
-    });
+    let csvContent = "";
+    let fileName = "";
+    
+    if (isForwardsActive) {
+        if (!calculationResults.forward_rates_table) return;
+        csvContent = "Period,Start Date,End Date,Year Fraction,Implied Forward Rate\n";
+        calculationResults.forward_rates_table.forEach(row => {
+            csvContent += `"${row.period}",${row.start_date},${row.end_date},${row.dt},${row.forward_rate}%\n`;
+        });
+        fileName = `implied_forward_rates_${document.getElementById('trade-date').value}.csv`;
+    } else {
+        if (!calculationResults.knots) return;
+        csvContent = "Instrument,Tenor,Quote,MaturityDate,TimeInYears,DiscountFactor,ZeroRate\n";
+        calculationResults.knots.forEach(k => {
+            if (k.error) return; // skip errors
+            const dfVal = k.df !== undefined ? k.df : '';
+            const zeroVal = k.zero_rate !== undefined ? k.zero_rate : '';
+            const matVal = k.maturity_date || '';
+            csvContent += `${k.instrument},${k.tenor},${k.quote},${matVal},${k.t},${dfVal},${zeroVal}\n`;
+        });
+        fileName = `yieldcurve_knots_${document.getElementById('trade-date').value}.csv`;
+    }
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `yieldcurve_results_${document.getElementById('trade-date').value}.csv`);
+    link.setAttribute("download", fileName);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();

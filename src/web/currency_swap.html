@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cross-Currency Swap Pricer</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="grid-overlay"></div>
+    
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo">
+                <i class="fa-solid fa-chart-line-up logo-icon"></i>
+                <span>Yield<span class="highlight">Curve</span></span>
+            </div>
+            <nav class="nav-links">
+                <a href="index.html"><i class="fa-solid fa-calculator"></i> Curve Builder</a>
+                <a href="currency_swap.html" class="active"><i class="fa-solid fa-arrow-right-arrow-left"></i> Currency Swap</a>
+                <a href="docs.html"><i class="fa-solid fa-book-open"></i> Docs & Guide</a>
+                <a href="https://www.animestats.tf/" target="_blank"><i class="fa-solid fa-wand-magic-sparkles"></i> Inspiration</a>
+            </nav>
+            <div class="header-actions">
+                <button id="theme-toggle" class="icon-btn" title="Toggle Theme">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <section class="hero-section">
+            <h1 class="hero-title"><span class="highlight">Currency Swap Pricer</span></h1>
+            <p class="hero-subtitle">Price cross-currency fixed/float, float/float (basis), and fixed/fixed interest rate swaps. Bootstrap dual yield curves, derive the FX forward curve via CIP, and project complete cashflow schedules.</p>
+        </section>
+
+        <div class="dashboard-grid">    
+            <div class="left-column">
+                <!-- Leg 1 Configuration -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <i class="fa-solid fa-sign-in"></i>
+                        <h2>Leg 1 Configuration (Base Leg / Currency 1)</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg1-currency">Currency</label>
+                                <select id="leg1-currency">
+                                    <option value="USD" selected>USD</option>
+                                    <option value="EUR">EUR</option>
+                                    <option value="GBP">GBP</option>
+                                    <option value="JPY">JPY</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leg1-position">Position</label>
+                                <select id="leg1-position">
+                                    <option value="receiver" selected>Receive Interest</option>
+                                    <option value="payer">Pay Interest</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg1-type">Rate Type</label>
+                                <select id="leg1-type">
+                                    <option value="fixed">Fixed Rate</option>
+                                    <option value="floating" selected>Floating Rate</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leg1-rate" id="leg1-rate-label">Spread (%)</label>
+                                <input type="number" id="leg1-rate" value="0.0" step="0.01">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg1-notional">Notional (Currency 1)</label>
+                                <input type="text" id="leg1-notional" value="10,000,000">
+                            </div>
+                            <div class="form-group">
+                                <label for="leg1-frequency">Payment Frequency</label>
+                                <select id="leg1-frequency">
+                                    <option value="1">Annual (1)</option>
+                                    <option value="2" selected>Semi-Annual (2)</option>
+                                    <option value="4">Quarterly (4)</option>
+                                    <option value="12">Monthly (12)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg1-daycount">Day Count Convention</label>
+                                <select id="leg1-daycount">
+                                    <option value="ACT/365" selected>ACT/365</option>
+                                    <option value="ACT/360">ACT/360</option>
+                                    <option value="30/360">30/360</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leg1-tenor">Tenor (Years)</label>
+                                <input type="number" id="leg1-tenor" value="5" min="1" max="50">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leg 2 Configuration -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <i class="fa-solid fa-sign-out"></i>
+                        <h2>Leg 2 Configuration (Currency 2)</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg2-currency">Currency</label>
+                                <select id="leg2-currency">
+                                    <option value="USD">USD</option>
+                                    <option value="EUR" selected>EUR</option>
+                                    <option value="GBP">GBP</option>
+                                    <option value="JPY">JPY</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leg2-position">Position</label>
+                                <select id="leg2-position" disabled>
+                                    <option value="payer" selected>Pay Interest</option>
+                                    <option value="receiver">Receive Interest</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg2-type">Rate Type</label>
+                                <select id="leg2-type">
+                                    <option value="fixed" selected>Fixed Rate</option>
+                                    <option value="floating">Floating Rate</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leg2-rate" id="leg2-rate-label">Fixed Rate (%)</label>
+                                <input type="number" id="leg2-rate" value="3.0" step="0.01">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg2-notional">Notional (Currency 2)</label>
+                                <input type="text" id="leg2-notional" value="9,259,259.26">
+                            </div>
+                            <div class="form-group">
+                                <label for="leg2-frequency">Payment Frequency</label>
+                                <select id="leg2-frequency">
+                                    <option value="1">Annual (1)</option>
+                                    <option value="2" selected>Semi-Annual (2)</option>
+                                    <option value="4">Quarterly (4)</option>
+                                    <option value="12">Monthly (12)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leg2-daycount">Day Count Convention</label>
+                                <select id="leg2-daycount">
+                                    <option value="ACT/365">ACT/365</option>
+                                    <option value="ACT/360" selected>ACT/360</option>
+                                    <option value="30/360">30/360</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leg2-tenor">Tenor (Years)</label>
+                                <input type="number" id="leg2-tenor" value="5" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Spot FX & Global Setup -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-money-bill-transfer"></i>
+                        <h2>Global FX & Valuation Setup</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="spot-fx-rate">Spot FX Rate (<span id="fx-pair-label">USD/EUR</span>)</label>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <input type="number" id="spot-fx-rate" value="1.0800" step="0.0001" style="flex: 1;">
+                                    <button id="recalc-notional-btn" class="btn btn-secondary btn-sm" title="Re-calculate Leg 2 Notional using Spot FX" style="height: 45px;">
+                                        <i class="fa-solid fa-rotate"></i> Sync Notional
+                                    </button>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">
+                                    Defined as units of Currency 1 per unit of Currency 2 (e.g. 1.08 USD per EUR).
+                                </p>
+                            </div>
+                            <div class="form-group">
+                                <label for="trade-date">Trade Date (DD-MM-YYYY)</label>
+                                <input type="text" id="trade-date" value="28-05-2026" placeholder="DD-MM-YYYY">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div> 
+
+            <div class="right-column">
+                <!-- Curve 1 Settings & Import -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <h2>Curve 1 Market Data (<span id="curve1-name">USD</span>)</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="curve1-interpolation">Interpolation</label>
+                                <select id="curve1-interpolation">
+                                    <option value="Cubic Spline" selected>Cubic Spline</option>
+                                    <option value="Linear">Linear Zero Rates</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="curve1-cutoff">Futures Cutoff (Y)</label>
+                                <input type="number" id="curve1-cutoff" value="2.0" step="0.25">
+                            </div>
+                        </div>
+                        <div class="dropzone-container">
+                            <div id="curve1-dropzone" class="dropzone">
+                                <i class="fa-solid fa-cloud-arrow-up dropzone-icon"></i>
+                                <p class="dropzone-text">Drag & Drop Curve 1 CSV or <span class="browse-link">browse</span></p>
+                                <input type="file" id="curve1-file" accept=".csv" style="display: none;">
+                            </div>
+                        </div>
+                        <div id="curve1-status" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 5px;">
+                            Using default USD OIS curve sample data.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Curve 2 Settings & Import -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <h2>Curve 2 Market Data (<span id="curve2-name">EUR</span>)</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="curve2-interpolation">Interpolation</label>
+                                <select id="curve2-interpolation">
+                                    <option value="Cubic Spline" selected>Cubic Spline</option>
+                                    <option value="Linear">Linear Zero Rates</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="curve2-cutoff">Futures Cutoff (Y)</label>
+                                <input type="number" id="curve2-cutoff" value="2.0" step="0.25">
+                            </div>
+                        </div>
+                        <div class="dropzone-container">
+                            <div id="curve2-dropzone" class="dropzone">
+                                <i class="fa-solid fa-cloud-arrow-up dropzone-icon"></i>
+                                <p class="dropzone-text">Drag & Drop Curve 2 CSV or <span class="browse-link">browse</span></p>
+                                <input type="file" id="curve2-file" accept=".csv" style="display: none;">
+                            </div>
+                        </div>
+                        <div id="curve2-status" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 5px;">
+                            Using default EUR curve sample data.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pricing Trigger -->
+                <div class="card" style="border: 1px solid var(--primary-glow); background: rgba(59, 130, 246, 0.03);">
+                    <div class="card-body" style="padding: 20px; text-align: center; display: flex; flex-direction: column; gap: 15px; align-items: center;">
+                        <p style="font-size: 13px; color: var(--text-secondary);">
+                            Click below to generate interest rate curves, derive the CIP forward FX curve, and price the swap.
+                        </p>
+                        <button id="calculate-btn" class="btn btn-primary btn-lg" style="width: 100%;">
+                            <i class="fa-solid fa-bolt"></i> Calculate Swap Price & NPV
+                        </button>
+                        <button id="reset-curves-btn" class="btn btn-secondary" style="width: 100%;">
+                            <i class="fa-solid fa-rotate-left"></i> Reset to Default Sample Curves
+                        </button>
+                    </div>
+                </div>
+            </div> 
+        </div>
+        
+        <div id="alert-container" class="alert-container" style="margin-top: 20px;"></div>
+
+        <!-- Results Display -->
+        <div id="results-container" class="results-grid" style="display: none; grid-template-columns: 1fr; margin-top: 30px; gap: 24px;">
+            <!-- NPV summary cards -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <div class="card-header">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                    <h2>Cross-Currency Valuation & NPV Breakdown</h2>
+                </div>
+                <div class="card-body" style="display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; text-align: center; padding: 30px 24px;">
+                    <div>
+                        <h4 style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Leg 1 NPV (<span class="leg1-curr-label">USD</span>)</h4>
+                        <div id="leg1-interest-pv-display" style="font-size: 13px; color: var(--text-muted);">Interest PV: 0.00</div>
+                        <div id="leg1-notional-pv-display" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Notional PV: 0.00</div>
+                        <div id="leg1-total-pv-display" style="font-size: 20px; font-weight: 700; color: var(--primary);">0.00</div>
+                    </div>
+                    <div style="border-left: 1px solid var(--border-color); padding-left: 30px;">
+                        <h4 style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Leg 2 NPV (in <span class="leg1-curr-label">USD</span>)</h4>
+                        <div id="leg2-interest-pv-display" style="font-size: 13px; color: var(--text-muted);">Interest PV: 0.00</div>
+                        <div id="leg2-notional-pv-display" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Notional PV: 0.00</div>
+                        <div id="leg2-total-pv-display" style="font-size: 20px; font-weight: 700; color: var(--accent);">0.00</div>
+                    </div>
+                    <div style="border-left: 1px solid var(--border-color); padding-left: 30px;">
+                        <h4 style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Net Swap NPV (in <span class="leg1-curr-label">USD</span>)</h4>
+                        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 21px;">(Leg 1 PV + Leg 2 PV)</div>
+                        <div id="net-npv-display" style="font-size: 24px; font-weight: 800; color: var(--success); text-shadow: 0 0 10px rgba(16,185,129,0.25);">0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cashflow stuff -->
+            <div style="display: grid; grid-template-columns: 2fr 3fr; gap: 1rem;">
+                <!-- Cashflow bar chart timeline -->
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-water"></i>
+                            <h2>Projected Cashflow Timeline</h2>
+                        </div>
+                    </div>
+                    <div class="card-body chart-wrapper" style="height: 350px;">
+                        <div class="chart-canvas-holder" style="height: 100%;">
+                            <canvas id="cashflow-timeline-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Merged Cashflow Schedule -->
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-calendar-days"></i>
+                            <h2>Projected Cashflow Schedule & PV</h2>
+                        </div>
+                        <button id="export-cashflows" class="btn btn-secondary btn-sm">
+                            <i class="fa-solid fa-file-export"></i> Export CSV
+                        </button>
+                    </div>
+
+                    <div class="card-body scroll-container output-table-wrapper" style="max-height: 450px;">
+                        <table class="results-table" id="cashflows-table">
+                            <thead>
+                                <tr>
+                                    <th>Payment Date</th>
+                                    <th>Type</th>
+                                    <th>Leg 1 Cashflow (<span class="leg1-curr-label">USD</span>)</th>
+                                    <th>Leg 2 Cashflow (<span class="leg2-curr-label">EUR</span>)</th>
+                                    <th>Forward FX Rate</th>
+                                    <th>Leg 2 Converted (<span class="leg1-curr-label">USD</span>)</th>
+                                    <th>Net Cashflow (<span class="leg1-curr-label">USD</span>)</th>
+                                    <th>DF (<span class="leg1-curr-label">USD</span>)</th>
+                                    <th>PV of Net (<span class="leg1-curr-label">USD</span>)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cashflows-tbody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 1rem;">
+                <!-- Yield Curves Plot -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <h2>Interest Rate & FX Forward Curves</h2>
+                        <div class="chart-toggles">
+                            <button id="show-zero-rate" class="tab-btn active">Zero Rates</button>
+                            <button id="show-df" class="tab-btn">Discount Factors</button>
+                            <button id="show-fx-forward" class="tab-btn">FX Forwards</button>
+                        </div>
+                    </div>
+                    <div class="card-body chart-wrapper" style="height: 400px;">
+                        <div class="chart-canvas-holder" style="height: 100%;">
+                            <canvas id="curves-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- Yield Curve Nodes & FX Forwards Table Container -->
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-table"></i>
+                        <h2>Curve Nodes & Forward Rates</h2>
+                    </div>
+                    <div class="chart-toggles">
+                        <button id="show-curve1-table" class="tab-btn active"><span id="curve1-tab-label">USD Nodes</span></button>
+                        <button id="show-curve2-table" class="tab-btn"><span id="curve2-tab-label">EUR Nodes</span></button>
+                        <button id="show-fx-table" class="tab-btn">FX Forward Curve</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Curve 1 Nodes Wrapper -->
+                    <div id="curve1-table-wrapper" class="scroll-container output-table-wrapper" style="max-height: 320px; padding: 10px;">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Tenor</th>
+                                    <th>DF</th>
+                                    <th>Zero Rate</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="curve1-knots-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Curve 2 Nodes Wrapper -->
+                    <div id="curve2-table-wrapper" class="scroll-container output-table-wrapper" style="max-height: 320px; padding: 10px; display: none;">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Tenor</th>
+                                    <th>DF</th>
+                                    <th>Zero Rate</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="curve2-knots-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- FX Forward Curve Wrapper -->
+                    <div id="fx-table-wrapper" class="scroll-container output-table-wrapper" style="max-height: 320px; padding: 10px; display: none;">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Tenor</th>
+                                    <th>Time (Y)</th>
+                                    <th>Forward Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fx-forward-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="app-footer">
+        <p>&copy; 2026 YieldCurve. Built for institutional-grade fixed income analytics. Styled with inspiration from AnimeStats.</p>
+    </footer>
+
+    <script src="currency_swap.js"></script>
+</body>
+</html>

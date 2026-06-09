@@ -231,6 +231,7 @@
 
         <nav class="nav-links">
             <a href="index.html"><i class="fa-solid fa-calculator"></i> Curve Builder</a>
+            <a href="currency_swap.html"><i class="fa-solid fa-arrow-right-arrow-left"></i> Currency Swap</a>
             <a class="active" href="docs.html"><i class="fa-solid fa-book-open"></i> Docs &amp; Guide</a>
             <a href="https://www.animestats.tf/" target="_blank"><i class="fa-solid fa-wand-magic-sparkles"></i> Inspiration</a>
         </nav>
@@ -261,6 +262,7 @@
                     <li><a href="#leg-valuation"><i class="fa-solid fa-file-invoice-dollar"></i> 6. Swap Leg Valuation</a></li>
                     <li><a href="#risk-management"><i class="fa-solid fa-shield-halved"></i> 7. Risk &amp; Hedging (DV01)</a></li>
                     <li><a href="#liquidity-engine"><i class="fa-solid fa-filter"></i> 8. Liquidity Selection</a></li>
+                    <li><a href="#currency-swap-faq"><i class="fa-solid fa-circle-question"></i> 9. Currency Swap FAQ</a></li>
                 </ul>
             </aside>
 
@@ -638,6 +640,27 @@
                         <li>All other overlapping instruments are marked as <strong>Skipped (Illiquid Overlap)</strong> to protect the curve building matrix.</li>
                         <li><strong>Theoretical Valuation Comparison</strong>: The engine still prices the skipped instruments against the generated curve, showing the valuation gap between actual market quotes and clean curve predictions. This allows traders to evaluate discrepancies.</li>
                     </ul>
+                </section>
+                <!-- Section 9 -->
+                <section class="docs-section" id="currency-swap-faq">
+                    <h2><i class="fa-solid fa-circle-question"></i> 9. Cross-Currency Swap FAQ</h2>
+                    <p>
+                        A cross-currency swap involves exchanging cash flows in two different currencies. Here are some key questions resolved for learners:
+                    </p>
+                    
+                    <h3>Why do we need a yield curve for a fixed leg if the coupon rate is fixed?</h3>
+                    <p>
+                        Even though the cashflow payments of a fixed leg are static (e.g., 3.5%), you still require the corresponding currency's yield curve to:
+                    </p>
+                    <ul>
+                        <li><strong>Discount Cashflows</strong>: Find the present value (PV) of the payments today. Each payment must be discounted using the interest rate for its specific payment date.</li>
+                        <li><strong>FX Forward Curve Derivation</strong>: Under Covered Interest Parity (CIP), the forward FX rate at maturity $t$ is calculated as $F(t) = S_0 \times \frac{DF_2(t)}{DF_1(t)}$. Both curves are necessary to find these discount factors.</li>
+                    </ul>
+                    
+                    <h3>What is the difference between the Contract "Fixed" Rate and Market Rates?</h3>
+                    <p>
+                        The <strong>Contract Rate</strong> (or fixed leg coupon) is the agreed-upon interest rate that the counterparties exchange. The <strong>Market Rates</strong> (Cash, Futures, Swaps quotes) are the current rates trading in the open market, which we bootstrap to build the <strong>Yield Curve</strong> (representing the term structure of interest rates).
+                    </p>
                 </section>
             </div>
         </div>

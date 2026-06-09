@@ -19,6 +19,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
+from dateutil.relativedelta import relativedelta
 from quant.futures_curve_builder import FuturesCurveBuilder
 from quant.treasury_curve_builder import TreasuryCurveBuilder
 from quant.cubic_spline import CubicSplineCurve
@@ -26,6 +27,7 @@ from quant.day_counter import calculate_year_fraction
 from quant.swap_pricer import SwapPricer
 from quant.cashflow_engine import CashflowEngine
 from quant.swap_legs import InterestRateLeg
+from quant.currency_swap_pricer import CurrencySwapPricer
 
 app = Flask(__name__, static_folder='web', static_url_path='')
 
@@ -492,16 +494,78 @@ def calculate():
             zero_rates_smooth = np.interp(times_smooth, times, rates).tolist()
             dfs_smooth = np.interp(times_smooth, times, dfs).tolist()
             
+        # --- CALCULATE IMPLIED FORWARD RATES ---
+        # 1. Smooth forward rate curve for the chart: f(t) = - (ln(df(t+eps)) - ln(df(t))) / eps
+        epsilon = 0.005
+        times_smooth_plus = times_smooth + epsilon
+        
+        if interpolation_method == 'Cubic Spline' and len(times) >= 3:
+            try:
+                dfs_smooth_plus = df_spline.evaluate(times_smooth_plus)
+            except Exception:
+                dfs_smooth_plus = np.interp(times_smooth_plus, times, dfs)
+        else:
+            dfs_smooth_plus = np.interp(times_smooth_plus, times, dfs)
+            
+        forward_rates_smooth = []
+        for i in range(len(times_smooth)):
+            df_t = dfs_smooth[i]
+            df_t_plus = dfs_smooth_plus[i]
+            if df_t > 0 and df_t_plus > 0:
+                f_rate = -(np.log(df_t_plus) - np.log(df_t)) / epsilon
+            else:
+                f_rate = 0.0
+            forward_rates_smooth.append(round(float(f_rate) * 100.0, 4))
+            
+        # 2. Implied simple forward rates table between consecutive active knots
+        forward_rates_table = []
+        active_knots = sorted([k for k in knots if 'error' not in k and not k.get('skipped', False)], key=lambda x: x['t'])
+        
+        prev_t = 0.0
+        prev_df = 1.0
+        prev_date_str = trade_date.strftime('%Y-%m-%d')
+        prev_tenor = 'Spot'
+        
+        for knot in active_knots:
+            t_curr = knot['t']
+            df_curr = knot['df']
+            tenor_curr = knot['tenor']
+            date_curr_str = knot['maturity_date']
+            
+            if t_curr > prev_t:
+                dt = t_curr - prev_t
+                if df_curr > 0:
+                    f_rate = (prev_df / df_curr - 1.0) / dt
+                else:
+                    f_rate = 0.0
+                    
+                forward_rates_table.append({
+                    'period': f"{prev_tenor} to {tenor_curr}",
+                    'start_tenor': prev_tenor,
+                    'end_tenor': tenor_curr,
+                    'start_date': prev_date_str,
+                    'end_date': date_curr_str,
+                    'dt': round(dt, 4),
+                    'forward_rate': round(float(f_rate) * 100.0, 4)
+                })
+                
+            prev_t = t_curr
+            prev_df = df_curr
+            prev_date_str = date_curr_str
+            prev_tenor = tenor_curr
+
         return jsonify({
             'success': True,
             'config': config,
             'knots': knots,
             'portfolio_results': portfolio_results,
             'cashflows': cashflow_timeseries,
+            'forward_rates_table': forward_rates_table,
             'curves': {
                 'times': times_smooth.tolist(),
                 'zero_rates': zero_rates_smooth,
                 'discount_factors': dfs_smooth,
+                'forward_rates': forward_rates_smooth,
                 'method': interpolation_method
             }
         })
@@ -513,56 +577,343 @@ def calculate():
             'error': f"Curve building error: {str(e)}"
         }), 500
 
-@app.route('/api/price-cross-asset', methods=['POST'])
-def price_cross_asset():
+# --- CROSS-CURRENCY SWAP PRICER EXTENSION ENDPOINTS & HELPERS ---
+
+USD_FALLBACK_MARKET_DATA = [
+    { 'Instrument': 'Cash', 'Tenor': 'O/N', 'QuoteType': 'RATE', 'Quote': 3.550, 'Spread': 1.0 },
+    { 'Instrument': 'Cash', 'Tenor': '1M', 'QuoteType': 'RATE', 'Quote': 3.608, 'Spread': 1.2 },
+    { 'Instrument': 'Cash', 'Tenor': '3M', 'QuoteType': 'RATE', 'Quote': 3.649, 'Spread': 1.5 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3M6', 'QuoteType': 'PRICE', 'Quote': 96.330, 'Spread': 0.5 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3U6', 'QuoteType': 'PRICE', 'Quote': 96.250, 'Spread': 0.6 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3Z6', 'QuoteType': 'PRICE', 'Quote': 96.155, 'Spread': 0.5 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3H7', 'QuoteType': 'PRICE', 'Quote': 96.080, 'Spread': 0.8 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3M7', 'QuoteType': 'PRICE', 'Quote': 96.065, 'Spread': 0.7 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3U7', 'QuoteType': 'PRICE', 'Quote': 96.095, 'Spread': 0.9 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3Z7', 'QuoteType': 'PRICE', 'Quote': 96.140, 'Spread': 0.8 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3H8', 'QuoteType': 'PRICE', 'Quote': 96.170, 'Spread': 1.1 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3M8', 'QuoteType': 'PRICE', 'Quote': 96.180, 'Spread': 1.0 },
+    { 'Instrument': 'Swap', 'Tenor': '1Y', 'QuoteType': 'RATE', 'Quote': 3.849, 'Spread': 2.0 },
+    { 'Instrument': 'Swap', 'Tenor': '2Y', 'QuoteType': 'RATE', 'Quote': 3.899, 'Spread': 2.2 },
+    { 'Instrument': 'Swap', 'Tenor': '3Y', 'QuoteType': 'RATE', 'Quote': 3.889, 'Spread': 2.5 },
+    { 'Instrument': 'Swap', 'Tenor': '5Y', 'QuoteType': 'RATE', 'Quote': 3.906, 'Spread': 2.8 },
+    { 'Instrument': 'Swap', 'Tenor': '7Y', 'QuoteType': 'RATE', 'Quote': 3.975, 'Spread': 3.2 },
+    { 'Instrument': 'Swap', 'Tenor': '10Y', 'QuoteType': 'RATE', 'Quote': 4.089, 'Spread': 3.5 },
+    { 'Instrument': 'Swap', 'Tenor': '15Y', 'QuoteType': 'RATE', 'Quote': 4.264, 'Spread': 4.0 },
+    { 'Instrument': 'Swap', 'Tenor': '30Y', 'QuoteType': 'RATE', 'Quote': 4.308, 'Spread': 5.0 }
+]
+
+EUR_FALLBACK_MARKET_DATA = [
+    { 'Instrument': 'Cash', 'Tenor': 'O/N', 'QuoteType': 'RATE', 'Quote': 2.250, 'Spread': 1.0 },
+    { 'Instrument': 'Cash', 'Tenor': '1M', 'QuoteType': 'RATE', 'Quote': 2.300, 'Spread': 1.2 },
+    { 'Instrument': 'Cash', 'Tenor': '3M', 'QuoteType': 'RATE', 'Quote': 2.350, 'Spread': 1.5 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3M6', 'QuoteType': 'PRICE', 'Quote': 97.650, 'Spread': 0.5 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3U6', 'QuoteType': 'PRICE', 'Quote': 97.600, 'Spread': 0.6 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3Z6', 'QuoteType': 'PRICE', 'Quote': 97.550, 'Spread': 0.5 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3H7', 'QuoteType': 'PRICE', 'Quote': 97.500, 'Spread': 0.8 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3M7', 'QuoteType': 'PRICE', 'Quote': 97.450, 'Spread': 0.7 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3U7', 'QuoteType': 'PRICE', 'Quote': 97.400, 'Spread': 0.9 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3Z7', 'QuoteType': 'PRICE', 'Quote': 97.350, 'Spread': 0.8 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3H8', 'QuoteType': 'PRICE', 'Quote': 97.300, 'Spread': 1.1 },
+    { 'Instrument': 'Future', 'Tenor': 'SR3M8', 'QuoteType': 'PRICE', 'Quote': 97.250, 'Spread': 1.0 },
+    { 'Instrument': 'Swap', 'Tenor': '1Y', 'QuoteType': 'RATE', 'Quote': 2.800, 'Spread': 2.0 },
+    { 'Instrument': 'Swap', 'Tenor': '2Y', 'QuoteType': 'RATE', 'Quote': 2.850, 'Spread': 2.2 },
+    { 'Instrument': 'Swap', 'Tenor': '3Y', 'QuoteType': 'RATE', 'Quote': 2.900, 'Spread': 2.5 },
+    { 'Instrument': 'Swap', 'Tenor': '5Y', 'QuoteType': 'RATE', 'Quote': 3.000, 'Spread': 2.8 },
+    { 'Instrument': 'Swap', 'Tenor': '7Y', 'QuoteType': 'RATE', 'Quote': 3.050, 'Spread': 3.2 },
+    { 'Instrument': 'Swap', 'Tenor': '10Y', 'QuoteType': 'RATE', 'Quote': 3.100, 'Spread': 3.5 },
+    { 'Instrument': 'Swap', 'Tenor': '15Y', 'QuoteType': 'RATE', 'Quote': 3.150, 'Spread': 4.0 },
+    { 'Instrument': 'Swap', 'Tenor': '30Y', 'QuoteType': 'RATE', 'Quote': 3.200, 'Spread': 5.0 }
+]
+
+def _parse_and_validate_market_data(market_data_raw, curve_type):
+    records = []
+    for idx, row in enumerate(market_data_raw):
+        inst = row.get('Instrument', '').strip().capitalize()
+        tenor = row.get('Tenor', '').strip().upper()
+        
+        # Parse Spread optionally
+        spread_val = row.get('Spread')
+        spread = None
+        if spread_val is not None and str(spread_val).strip() != '':
+            try:
+                spread = float(spread_val)
+            except ValueError:
+                return None, f"Row {idx + 1} ({tenor}): Spread must be a valid number. Got '{spread_val}'"
+        
+        if not inst or inst not in ['Cash', 'Future', 'Swap']:
+            return None, f"Row {idx + 1}: Instrument must be 'Cash', 'Future', or 'Swap'. Got '{inst}'"
+            
+        if not tenor:
+            return None, f"Row {idx + 1}: Tenor must be specified (e.g., 'O/N', '1M', 'SR3M6')."
+            
+        quote_type = row.get('QuoteType', '').strip().upper()
+        if not quote_type or quote_type not in ['RATE', 'PRICE']:
+            return None, f"Row {idx + 1}: QuoteType must be 'RATE' or 'PRICE'."
+            
+        quote_val = row.get('Quote')
+        try:
+            quote = float(quote_val)
+        except (ValueError, TypeError):
+            return None, f"Row {idx + 1} ({tenor}): Quote value must be a valid number. Got '{quote_val}'"
+            
+        records.append({
+            'Instrument': inst,
+            'Tenor': tenor,
+            'QuoteType': quote_type,
+            'Quote': quote,
+            'Spread': spread
+        })
+    return records, None
+
+def _generate_curve_knots(market_data_records, builder, config):
+    knots = []
+    for item in market_data_records:
+        inst = item['Instrument']
+        tenor = item['Tenor']
+        skipped = item.get('skipped', False)
+        skipped_reason = item.get('skipped_reason')
+        
+        try:
+            if inst in ['Cash', 'Swap']:
+                mat_date = builder._tenor_to_date(tenor)
+            else: # Future
+                _, mat_date = builder._parse_imm_future(tenor)
+                
+            t = calculate_year_fraction(builder.trade_date, mat_date, builder.convention)
+            df = builder._get_discount_factor(t)
+            zero_rate = 0.0 if t == 0 else (-np.log(df) / t) * 100.0
+            
+            # Check OIS cutoff rules on active nodes
+            if inst == 'Future' and t > builder.futures_cutoff_years + 0.1:
+                skipped = True
+                skipped_reason = f"Skipped (Future beyond {builder.futures_cutoff_years}Y cutoff)"
+            elif inst == 'Swap' and t <= builder.futures_cutoff_years + 0.1:
+                skipped = True
+                skipped_reason = f"Skipped (Swap overlaps with futures within {builder.futures_cutoff_years}Y cutoff)"
+            
+            knot_info = {
+                'instrument': inst,
+                'tenor': tenor,
+                'maturity_date': mat_date.strftime('%Y-%m-%d'),
+                't': round(t, 6),
+                'df': round(df, 6),
+                'zero_rate': round(zero_rate, 4),
+                'skipped': skipped,
+                'skipped_reason': skipped_reason,
+                'quote_type': item['QuoteType'],
+                'quote': item['Quote']
+            }
+            
+            if item.get('Spread') is not None:
+                knot_info['spread'] = item['Spread']
+                
+            knots.append(knot_info)
+        except Exception as e:
+            knot_err = {
+                'instrument': inst,
+                'tenor': tenor,
+                'error': str(e),
+                'quote_type': item['QuoteType'],
+                'quote': item['Quote']
+            }
+            knots.append(knot_err)
+            
+    knots.sort(key=lambda x: x.get('t', 9999.0))
+    return knots
+
+def _generate_smooth_curve(knots, interpolation_method):
+    valid_knots = [k for k in knots if 'error' not in k and not k.get('skipped', False) and k.get('t', 0.0) > 0]
+    if len(valid_knots) < 1:
+        return {'times': [], 'zero_rates': [], 'discount_factors': []}
+        
+    times = np.array([k['t'] for k in valid_knots])
+    dfs = np.array([k['df'] for k in valid_knots])
+    rates = np.array([k['zero_rate'] for k in valid_knots])
+    
+    min_time = float(times.min())
+    max_time = float(times.max())
+    
+    if min_time <= 0:
+        min_time = 0.0001
+        
+    times_smooth = np.linspace(min_time, max_time, 200)
+    
+    zero_rates_smooth = []
+    dfs_smooth = []
+    
+    if interpolation_method == 'Cubic Spline' and len(times) >= 3:
+        try:
+            zero_spline = CubicSplineCurve(times, rates)
+            zero_rates_smooth = zero_spline.evaluate(times_smooth).tolist()
+            
+            df_spline = CubicSplineCurve(times, dfs)
+            dfs_smooth = df_spline.evaluate(times_smooth).tolist()
+        except Exception:
+            zero_rates_smooth = np.interp(times_smooth, times, rates).tolist()
+            dfs_smooth = np.interp(times_smooth, times, dfs).tolist()
+    else:
+        zero_rates_smooth = np.interp(times_smooth, times, rates).tolist()
+        dfs_smooth = np.interp(times_smooth, times, dfs).tolist()
+        
+    return {
+        'times': times_smooth.tolist(),
+        'zero_rates': zero_rates_smooth,
+        'discount_factors': dfs_smooth,
+        'method': interpolation_method
+    }
+
+@app.route('/api/calculate_currency_swap', methods=['POST'])
+def calculate_currency_swap():
     try:
-        payload = request.json
+        req_data = request.get_json() or {}
         
-        # 1. Extract the user's inputs from the frontend
-        notional = float(payload.get('notional', 1000000))
-        fixed_rate = float(payload.get('fixed_rate', 0.05)) # e.g., 0.05 for 5%
-        ticker = payload.get('ticker', 'AAPL').upper()
-        initial_price = float(payload.get('initial_price'))
-        tenor_years = int(payload.get('tenor_years', 1))
+        trade_date_str = req_data.get('trade_date', '28-05-2026')
+        spot_fx_rate = float(req_data.get('spot_fx_rate', 1.08))
         
-        # Trade date is today, maturity is tenor_years from today
-        trade_date = datetime.date.today()
-        maturity_date = trade_date + datetime.timedelta(days=tenor_years * 365)
+        leg1 = req_data.get('leg1', {})
+        leg2 = req_data.get('leg2', {})
         
-        # 2. Call the Oracle to get the live market price
-        current_price = AssetPriceOracle.get_latest_price(ticker)
+        leg1_market_raw = req_data.get('leg1_market_data', [])
+        leg2_market_raw = req_data.get('leg2_market_data', [])
         
-        # 3. Model the Discrete Legs (This is where Step 3 lives!)
-        paying_leg = InterestRateLeg(
-            notional=notional, 
-            rate_type='fixed', 
-            frequency=2, 
-            fixed_rate=fixed_rate
+        curve_config1 = req_data.get('curve_config1', {})
+        curve_config2 = req_data.get('curve_config2', {})
+        
+        # If empty, use fallbacks
+        if not leg1_market_raw:
+            leg1_market_raw = USD_FALLBACK_MARKET_DATA
+        if not leg2_market_raw:
+            leg2_market_raw = EUR_FALLBACK_MARKET_DATA
+            
+        # Parse trade date
+        try:
+            trade_date = datetime.datetime.strptime(trade_date_str, "%d-%m-%Y").date()
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'error': f"Invalid Trade Date format: '{trade_date_str}'. Expected DD-MM-YYYY."
+            }), 400
+            
+        # Parse market data for Leg 1
+        leg1_records, err = _parse_and_validate_market_data(leg1_market_raw, 'OIS')
+        if err:
+            return jsonify({'success': False, 'error': f"Leg 1 Curve: {err}"}), 400
+            
+        # Parse market data for Leg 2
+        leg2_records, err = _parse_and_validate_market_data(leg2_market_raw, 'OIS')
+        if err:
+            return jsonify({'success': False, 'error': f"Leg 2 Curve: {err}"}), 400
+            
+        # Resolve overlaps for both
+        config1 = {
+            'trade_date': trade_date_str,
+            'day_count_convention': curve_config1.get('day_count_convention', 'ACT/365'),
+            'payment_frequency': int(curve_config1.get('payment_frequency', 2)),
+            'interpolation_method': curve_config1.get('interpolation_method', 'Cubic Spline'),
+            'futures_cutoff_years': float(curve_config1.get('futures_cutoff_years', 2.0))
+        }
+        config2 = {
+            'trade_date': trade_date_str,
+            'day_count_convention': curve_config2.get('day_count_convention', 'ACT/365'),
+            'payment_frequency': int(curve_config2.get('payment_frequency', 2)),
+            'interpolation_method': curve_config2.get('interpolation_method', 'Cubic Spline'),
+            'futures_cutoff_years': float(curve_config2.get('futures_cutoff_years', 2.0))
+        }
+        
+        leg1_records = resolve_liquidity_overlaps(
+            market_data_records=leg1_records,
+            curve_type='OIS',
+            trade_date=trade_date,
+            day_count_convention=config1['day_count_convention'],
+            config=config1
         )
         
-        receiving_leg = AssetReturnLeg(
-            notional=notional,
-            initial_price=initial_price,
-            current_price=current_price
+        leg2_records = resolve_liquidity_overlaps(
+            market_data_records=leg2_records,
+            curve_type='OIS',
+            trade_date=trade_date,
+            day_count_convention=config2['day_count_convention'],
+            config=config2
         )
         
-
-        pricer = SwapPricer(curve_builder=FuturesCurveBuilder)
-        npv = pricer.price_swap(paying_leg, receiving_leg, maturity_date)
+        active_records1 = [r for r in leg1_records if not r.get('skipped', False)]
+        active_records2 = [r for r in leg2_records if not r.get('skipped', False)]
         
-        # 5. Send the math back to the frontend
+        if not active_records1 or not active_records2:
+            return jsonify({
+                'success': False,
+                'error': 'All loaded instruments were flagged as skipped by the liquidity overlap filter.'
+            }), 400
+            
+        # Build curves
+        builder1 = FuturesCurveBuilder(market_data=active_records1, config=config1)
+        builder1.build_curve()
+        
+        builder2 = FuturesCurveBuilder(market_data=active_records2, config=config2)
+        builder2.build_curve()
+        
+        # Determine swap maturity
+        tenor_years = int(leg1.get('tenor_years', 5))
+        maturity_date = trade_date + relativedelta(years=tenor_years)
+        
+        # Instantiate pricer and value swap
+        pricer = CurrencySwapPricer(
+            trade_date=trade_date,
+            maturity_date=maturity_date,
+            spot_fx_rate=spot_fx_rate,
+            leg1_config=leg1,
+            leg2_config=leg2,
+            curve_builder1=builder1,
+            curve_builder2=builder2
+        )
+        
+        cashflows, npv_results = pricer.price_swap()
+        
+        # Generate knots outputs for visualization
+        knots1 = _generate_curve_knots(leg1_records, builder1, config1)
+        knots2 = _generate_curve_knots(leg2_records, builder2, config2)
+        
+        # Generate smooth curves
+        smooth_curve1 = _generate_smooth_curve(knots1, config1['interpolation_method'])
+        smooth_curve2 = _generate_smooth_curve(knots2, config2['interpolation_method'])
+        
+        # Generate FX Forward Curve at standard tenors
+        std_tenors = ['O/N', '1M', '3M', '6M', '1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '15Y', '30Y']
+        fx_forward_curve = []
+        for tenor in std_tenors:
+            try:
+                # Convert tenor to date
+                t_date = builder1._tenor_to_date(tenor)
+                t1 = calculate_year_fraction(trade_date, t_date, config1['day_count_convention'])
+                t2 = calculate_year_fraction(trade_date, t_date, config2['day_count_convention'])
+                df1 = builder1._get_discount_factor(t1)
+                df2 = builder2._get_discount_factor(t2)
+                f_rate = spot_fx_rate * (df2 / df1) if df1 > 0 else spot_fx_rate
+                fx_forward_curve.append({
+                    'tenor': tenor,
+                    't': round(t1, 4),
+                    'forward_rate': round(f_rate, 6)
+                })
+            except Exception:
+                continue
+                
         return jsonify({
-            "status": "success",
-            "ticker": ticker,
-            "initial_price": initial_price,
-            "current_price": current_price,
-            "price_return_pct": ((current_price / initial_price) - 1.0) * 100,
-            "swap_npv": round(npv, 2)
-        }), 200
-
+            'success': True,
+            'leg1_knots': knots1,
+            'leg2_knots': knots2,
+            'leg1_curve': smooth_curve1,
+            'leg2_curve': smooth_curve2,
+            'fx_forward_curve': fx_forward_curve,
+            'cashflows': cashflows,
+            'npv_results': npv_results
+        })
+        
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f"Currency swap calculation error: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)

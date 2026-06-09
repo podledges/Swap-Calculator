@@ -28,6 +28,7 @@
             </div>
             <nav class="nav-links">
                 <a href="index.html" class="active"><i class="fa-solid fa-calculator"></i> Curve Builder</a>
+                <a href="currency_swap.html"><i class="fa-solid fa-arrow-right-arrow-left"></i> Currency Swap</a>
                 <a href="docs.html"><i class="fa-solid fa-book-open"></i> Docs & Guide</a>
                 <a href="https://www.animestats.tf/" target="_blank"><i class="fa-solid fa-wand-magic-sparkles"></i> Inspiration</a>
             </nav>
@@ -233,6 +234,7 @@
                     <div class="chart-toggles">
                         <button id="show-zero-rate" class="tab-btn active">Zero Rates</button>
                         <button id="show-df" class="tab-btn">Discount Factors</button>
+                        <button id="show-forward-rate" class="tab-btn">Forward Rates</button>
                     </div>
                 </div>
                 <div class="card-body chart-wrapper">
@@ -261,21 +263,47 @@
             </div>
 
             <div class="outputs-card card">
-                <div class="card-header">
-                    <i class="fa-solid fa-table"></i>
-                    <h2>Bootstrapped Curve Nodes (Knots)</h2>
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-table"></i>
+                        <h2>Curve Details</h2>
+                    </div>
+                    <div class="chart-toggles">
+                        <button id="show-knots-table" class="tab-btn active">Curve Nodes</button>
+                        <button id="show-forwards-table" class="tab-btn">Forward Rates</button>
+                    </div>
                     <button id="export-results" class="btn btn-secondary btn-sm">
                         <i class="fa-solid fa-file-export"></i> Export CSV
                     </button>
                 </div>
-                <div class="card-body scroll-container output-table-wrapper">
-                    <table id="output-table" class="results-table">
-                        <thead id="output-table-head">
-                            <!-- Populated dynamically -->
-                        </thead>
-                        <tbody id="output-table-body">
+                <div class="card-body">
+                    <!-- Curve Nodes Table Wrapper -->
+                    <div id="knots-table-wrapper" class="scroll-container output-table-wrapper" style="padding: 10px;">
+                        <table id="output-table" class="results-table">
+                            <thead id="output-table-head">
+                                <!-- Populated dynamically -->
+                            </thead>
+                            <tbody id="output-table-body">
                             </tbody>
-                    </table>
+                        </table>
+                    </div>
+                    <!-- Implied Forward Rates Table Wrapper -->
+                    <div id="forwards-table-wrapper" class="scroll-container output-table-wrapper" style="display: none; padding: 10px;">
+                        <table id="forwards-table" class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th>Year Fraction (Δt)</th>
+                                    <th>Implied Forward Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody id="forwards-table-body">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
