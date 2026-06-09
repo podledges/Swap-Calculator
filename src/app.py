@@ -274,7 +274,7 @@ def calculate():
 
         portfolio_results = None
         portfolio_tuples_for_engine = []
-        asset_details_out = []  # MERGE (cross-asset): per-asset price details (multi-position)
+        asset_details_out = []  # === NEW: per-asset price details (multi-position)
 
         if portfolio_data:
             pricer = SwapPricer(builder)
@@ -300,10 +300,9 @@ def calculate():
                 ticker = str(pos.get('ticker', '')).strip().upper()
 
                 if ticker:
-                    # === MERGE (cross-asset / Lifetime PnL): per-position Asset
-                    # Trade Date + Present Date, one historical-fixings fetch, and
-                    # the hybrid AssetReturnLeg. Requires the matching swap_legs.py
-                    # and market_data.py versions. The else: IR path is unchanged. =
+                    # === MODIFIED (Lifetime PnL): resolve per-position dates,
+                    # fetch ONE historical-fixings window, and build the hybrid
+                    # AssetReturnLeg. The no-ticker IR path below is untouched. ==
                     asset_trade_date = str(pos.get('asset_trade_date', '')).strip()
                     present_date = str(pos.get('present_date', '')).strip()
                     asset_class = str(pos.get('asset_class', 'auto')).strip().lower() or 'auto'
@@ -326,10 +325,12 @@ def calculate():
                     if present_dt < trade_dt:
                         present_dt = trade_dt  # guard against inverted ranges
 
+                    # Spot snapshots (initial @ inception, current @ present).
                     try:
                         asset_data = AssetPriceOracle.get_asset_info(
                             ticker, trade_dt.isoformat(), present_dt.isoformat()
                         )
+                        # One-shot fixings dict spanning inception -> present.
                         historical_prices = AssetPriceOracle.get_historical_fixings(
                             ticker, trade_dt, present_dt
                         )
@@ -351,17 +352,19 @@ def calculate():
                         historical_prices=historical_prices,
                         asset_class=asset_class,
                     )
+                    # === END MODIFIED =========================================
                     paying_leg = fixed_leg
                     receiving_leg = asset_leg
                     portfolio_tuples_for_engine.append((asset_leg, tenor_years, is_payer))
 
+                    # === NEW: per-asset details (list supports multi-position) =
                     asset_details_out.append({
                         "ticker": asset_data["ticker"],
                         "initial_price": round(float(asset_data["initial_price"]), 4),
                         "current_price": round(float(asset_data["current_price"]), 4),
                         "dividend_yield": round(float(asset_data["dividend_yield"]), 6),
                     })
-                    # === END MERGE ===========================================
+                    # ==========================================================
                 else:
                     # Standard IR swap: fixed leg vs float leg
                     fixed_leg = InterestRateLeg(notional=notional, rate_type='fixed', frequency=payment_frequency, fixed_rate=fixed_rate)
@@ -393,7 +396,7 @@ def calculate():
                     "bumped_npv": round(total_bumped_npv, 2),
                     "pvbp": round(net_pvbp, 2),
                     "positions_priced": priced_count,
-                    "asset_details": asset_details_out or None,  # MERGE (cross-asset): None for pure IR
+                    "asset_details": asset_details_out or None,  # === list, None for pure IR books
                 }
 
         print("COMPUTED PORTFOLIO RESULTS:", portfolio_results)
