@@ -35,7 +35,20 @@
         /* CA-GRID : portfolio + quotes on the left (70%), curve config right (30%) */
         .ca-grid {
             grid-template-columns: 7fr 3fr;
+            align-items: stretch;
         }
+
+        /* CA-COL-FILL : equal column heights so the AMQ panel's bottom edge lines
+           up with the Calculate button at the foot of the right column. */
+        .ca-grid > .ca-main-col { height: 100%; }
+        .ca-grid > .ca-main-col > .data-panel { flex: 1 1 auto; min-height: 0; }
+        .ca-grid > .ca-main-col > .data-panel > .card-body {
+            max-height: none;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        .ca-grid > .right-column { height: 100%; }
+        .ca-grid > .right-column > .ca-conc-card { flex: 1 1 auto; }
 
         .ca-main-col {
             display: flex;
@@ -328,6 +341,116 @@
         .knots-collapsed .col-hideable, .cashflow-collapsed .col-hideable { display: none; }
         .ca-cashflow-row { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 3fr; gap: 16px; margin-top: 20px; }
         @media (max-width: 992px) { .ca-cashflow-row { grid-template-columns: 1fr; } }
+
+        /* CA-CALC-BTN : full width of the left column, bottom-aligned flush under AMQ */
+        .ca-calc-btn {
+            width: 100%;
+            margin-top: 0;
+            border-radius: 10px;
+            padding: 16px 24px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            border: none;
+            color: #fff;
+            box-shadow: 0 0 20px rgba(59,130,246,0.35), 0 0 40px rgba(6,182,212,0.15);
+            transition: box-shadow 0.25s, transform 0.2s, background 0.25s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .ca-calc-btn:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #0891b2 100%);
+            box-shadow: 0 0 32px rgba(59,130,246,0.55), 0 0 60px rgba(6,182,212,0.25);
+            transform: translateY(-1px);
+        }
+        .ca-calc-btn:active { transform: translateY(0); }
+
+        /* CA-CASHFLOW-ROW-FLEX : full-width flex row for chart + table.
+           grid-column 1/-1 makes it span the WHOLE results grid (the missing
+           span was why it sat squished in one half of the screen). */
+        .ca-cashflow-row-flex {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 16px;
+            margin-top: 20px;
+            width: 100%;
+            min-height: 420px;
+            align-items: stretch;
+        }
+        .ca-cf-chart-panel {
+            flex: 2;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            transition: flex 0.35s ease;
+        }
+        .ca-cf-chart-panel .chart-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .ca-cf-chart-panel .chart-canvas-holder {
+            flex: 1;
+            min-height: 320px;
+        }
+        .ca-cf-table-panel {
+            flex: 3;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            transition: flex 0.35s ease;
+        }
+        /* collapsed = narrower schedule, NOT hidden, so its toggle button stays reachable */
+        .ca-cf-table-panel.cf-collapsed .results-table { font-size: 11px; }
+        .ca-cf-table-body {
+            flex: 1;
+            max-height: 360px;
+            overflow-y: auto;
+        }
+        @media (max-width: 992px) {
+            .ca-cashflow-row-flex { flex-direction: column; min-height: auto; }
+            .ca-cf-chart-panel, .ca-cf-table-panel { flex: unset; width: 100%; }
+        }
+
+        /* CA-COLOUR : card header icons cyan glow */
+        .card-header i { color: var(--accent); }
+
+        /* CA-COLOUR : AMQ panel header accent stripe */
+        .data-panel.card > .card-header {
+            background: linear-gradient(90deg, rgba(6,182,212,0.07) 0%, transparent 60%);
+            border-bottom: 1px solid rgba(6,182,212,0.2);
+        }
+
+        /* CA-COLOUR : portfolio panel header */
+        #portfolio-panel > .card-header {
+            background: linear-gradient(90deg, rgba(59,130,246,0.07) 0%, transparent 60%);
+            border-bottom: 1px solid rgba(59,130,246,0.2);
+        }
+
+        /* CA-COLOUR : swap entry container faint cyan tint */
+        .swap-entry-container {
+            border-color: rgba(6,182,212,0.2) !important;
+            background: rgba(6,182,212,0.03) !important;
+        }
+
+        /* CA-COLOUR : results card headers */
+        .charts-card.card > .card-header,
+        .outputs-card.card > .card-header,
+        .ca-cf-table-panel > .card-header {
+            background: linear-gradient(90deg, rgba(59,130,246,0.07) 0%, transparent 60%);
+            border-bottom: 1px solid rgba(59,130,246,0.2);
+        }
+        .ca-cf-chart-panel > .card-header {
+            background: linear-gradient(90deg, rgba(6,182,212,0.07) 0%, transparent 60%);
+            border-bottom: 1px solid rgba(6,182,212,0.2);
+        }
+
+        /* Remove old card-footer since button is now standalone */
+        .data-panel .card-footer { display: none !important; }
     </style>
 </head>
 
@@ -499,15 +622,10 @@
                             <tbody id="market-table-body"></tbody>
                         </table>
                     </div>
-                    <div class="card-footer">
-                        <button id="calculate-btn" class="btn btn-primary btn-lg">
-                            <i class="fa-solid fa-bolt"></i> Calculate Cross-Asset NPV
-                        </button>
-                    </div>
                 </div>
             </div>
 
-            <!-- ===== RIGHT (30%): slim curve configuration ===== -->
+            <!-- ===== RIGHT (30%): curve config + concentration + calculate button (stacked, equal width) ===== -->
         <div class="right-column">
             <div class="control-panel card">
                 <div class="card-header">
@@ -542,7 +660,7 @@
                 </div>
             </div>
 
-    <div class="card" style="flex: 1; border: 1px solid var(--primary-glow);">
+    <div class="card ca-conc-card" style="flex: 1; border: 1px solid var(--accent-glow);">
         <div class="card-header">
             <i class="fa-solid fa-crosshairs"></i>
             <h2>Portfolio Concentration</h2>
@@ -556,10 +674,15 @@
             </p>
         </div>
     </div>
-</div>
-        <div 
-        id="alert-container" class="alert-container"></div>
-    </div>
+
+    <!-- Calculate button: bottom of the right column, directly under Portfolio Concentration -->
+    <button id="calculate-btn" class="btn btn-primary btn-lg ca-calc-btn">
+        <i class="fa-solid fa-bolt"></i> Calculate Cross-Asset NPV
+    </button>
+        </div>
+        </div>
+
+        <div id="alert-container" class="alert-container"></div>
 
         <!-- ===== Results (hidden until first run) ===== -->
         <div id="results-container" class="results-grid" style="display: none;">
@@ -639,35 +762,35 @@
             </div>
 
             <!-- CA-CASHFLOW-ROW : projection chart (left) + schedule & PV table (right) -->
-            <div id="ca-cashflow-container" style="display: flex; gap: 16px; margin-top: 20px; width: 100%;">
+            <div id="ca-cashflow-container" class="ca-cashflow-row-flex">
                 
-                <div id="cf-chart-panel" class="charts-card card" style="flex: 1; transition: all 0.3s ease; min-width: 400px; height: 45vh;">
+                <div id="cf-chart-panel" class="charts-card card ca-cf-chart-panel">
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <i class="fa-solid fa-water"></i>
+                            <i class="fa-solid fa-water" style="color: var(--accent);"></i>
                             <h2>Cashflow Projection</h2>
                         </div>
                     </div>
-                    <div class="card-body chart-wrapper">
-                        <div class="chart-canvas-holder">
+                    <div class="card-body chart-wrapper" style="flex: 1; padding: 16px;">
+                        <div class="chart-canvas-holder" style="position: relative; height: 100%;">
                             <canvas id="cashflow-chart"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <div id="cf-table-panel" class="card" style="width: 60%; transition: all 0.3s ease; height: 45vh; flex-shrink: 0;">
+                <div id="cf-table-panel" class="card ca-cf-table-panel">
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <i class="fa-solid fa-calendar-days"></i>
+                            <i class="fa-solid fa-calendar-days" style="color: var(--accent);"></i>
                             <h2>Schedule &amp; PV</h2>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button id="toggle-cashflow-table" class="btn btn-secondary btn-sm" title="Toggle Table Visibility">
+                            <button id="toggle-cashflow-table" class="btn btn-secondary btn-sm" title="Hide Table">
                                 <i class="fa-solid fa-compress"></i>
                             </button>
                         </div>
                     </div>
-                    <div class="card-body scroll-container output-table-wrapper" style="max-height: calc(45vh - 70px);">
+                    <div class="card-body scroll-container output-table-wrapper ca-cf-table-body">
                         <table class="results-table" id="cashflows-table">
                             <thead id="cashflows-table-head"></thead>
                             <tbody id="cashflows-tbody"></tbody>

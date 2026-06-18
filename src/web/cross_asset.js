@@ -712,14 +712,22 @@ function renderOutputTable() {
 
 const toggleKnotsBtn = document.getElementById('toggle-knots-table');
 const outputTable = document.getElementById('output-table');
+const resultsGridEl = document.getElementById('results-container');
 let knotsExpanded = true;
 if (toggleKnotsBtn && outputTable) {
     toggleKnotsBtn.addEventListener('click', () => {
         knotsExpanded = !knotsExpanded;
+        // 1) hide the secondary columns so the narrower table stays readable
         outputTable.classList.toggle('knots-collapsed', !knotsExpanded);
+        // 2) re-weight the results grid so the Valuation chart grows (skip on mobile)
+        if (resultsGridEl) {
+            const wide = window.matchMedia('(min-width: 993px)').matches;
+            resultsGridEl.style.gridTemplateColumns = (!knotsExpanded && wide) ? '2fr 1fr' : '';
+        }
         toggleKnotsBtn.innerHTML = knotsExpanded
             ? '<i class="fa-solid fa-compress"></i>' : '<i class="fa-solid fa-expand"></i>';
         toggleKnotsBtn.title = knotsExpanded ? 'Hide extra data' : 'Expand hidden data';
+        setTimeout(() => { if (yieldChart) yieldChart.resize(); }, 380);
     });
 }
 
@@ -850,25 +858,34 @@ function drawCashflowChart(cashflowData) {
 }
 
 // ---------- Toggle Logic for Seamless Expanding ----------
+// Mirrors the Currency Swap behaviour: never hides the panel outright (doing so
+// would also hide this very button), instead it re-weights the flex ratio so the
+// chart grows and the schedule shrinks while staying on screen and clickable.
 const toggleCfBtn = document.getElementById('toggle-cashflow-table');
+const cfChartPanel = document.getElementById('cf-chart-panel');
 const cfTablePanel = document.getElementById('cf-table-panel');
+let cfTableExpanded = true;
 
-if (toggleCfBtn && cfTablePanel) {
+if (toggleCfBtn && cfChartPanel && cfTablePanel) {
     toggleCfBtn.addEventListener('click', () => {
-        if (cfTablePanel.style.display === 'none') {
-            cfTablePanel.style.display = 'block';
+        cfTableExpanded = !cfTableExpanded;
+        if (cfTableExpanded) {
+            cfChartPanel.style.flex = '2';
+            cfTablePanel.style.flex = '3';
+            cfTablePanel.classList.remove('cf-collapsed');
             toggleCfBtn.innerHTML = '<i class="fa-solid fa-compress"></i>';
-            toggleCfBtn.title = "Hide Table";
+            toggleCfBtn.title = 'Shrink schedule';
         } else {
-            cfTablePanel.style.display = 'none';
+            cfChartPanel.style.flex = '5';
+            cfTablePanel.style.flex = '2';
+            cfTablePanel.classList.add('cf-collapsed');
             toggleCfBtn.innerHTML = '<i class="fa-solid fa-expand"></i>';
-            toggleCfBtn.title = "Show Table";
+            toggleCfBtn.title = 'Restore schedule';
         }
-        
-        // Let the CSS flex transition finish, then force Chart.js to recalculate its canvas bounds
+        // Let the flex transition settle, then let Chart.js recompute canvas bounds
         setTimeout(() => {
             if (cashflowChart) cashflowChart.resize();
-        }, 350); 
+        }, 380);
     });
 }
 
