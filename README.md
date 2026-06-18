@@ -6,7 +6,7 @@
 
   Built using Python (Flask) and plain HTML/JS/CSS, with a strictly decoupled object-oriented backend. This is an ongoing collaborative project to actually understand how a derivative gets priced, by building the pricing engine ourselves instead of trusting a black box.
 
-  ### <br>***Contents Page***
+  ### <br>**Contents Page**
   - [Showcase](#showcase)
   - [What is a Swap?](#what-is-a-swap)
   - [The Key Insight: Every Tab Bootstraps Its Own Curve](#the-key-insight-every-tab-bootstraps-its-own-curve)
@@ -15,7 +15,9 @@
     - [Tab 1: Interest Rate Swap](#tab-1-interest-rate-swap)
     - [Tab 2: Currency Swap](#tab-2-currency-swap)
     - [Tab 3: Cross-Asset Swap](#tab-3-cross-asset-swap)
-  - [Planned Updates](# 🚀 Planned Updates)
+  - ⚠️ Known Issues
+  - [Known Issues](#⚠️ Known Issues)
+  - [Planned Updates](#🚀 Planned Updates)
   - [Documentation & Guides](#documentation--guides)
   - [Acknowledgments & References](#acknowledgments--references)
   - [Contributors](#contributors)
@@ -206,14 +208,20 @@
 
   ## Acknowledgments & References
 
-  **References**
-
-  * **Miron, Paul. *Pricing and Hedging Swaps*.** This book served as our primary educational resource and reference guide. It provided the foundational knowledge on pricing methods, swap valuation, and the underlying mathematics that power the core logic of this calculator.
-
-  **Inspiration**
+  **web-app Inspiration**
 
   * **[AnimeStats](https://www.animestats.tf/)**
     This site served as our main inspiration for the user interface. We referenced its layout and visual design heavily when structuring the frontend of our application.
+
+  **Background**
+
+  *  Our first internship was both at ***Triquesta*** , where we had spent the first 2 and a half weeks reading a Masters Level Textbook about Swaps, which was an *eye-opening* experience, probably because podledges had 0 total hours spent in any Economics. Working out the  book examples were painful the 1st week or 2, when just a newbie. With constant exposure to this finance world, the intuition behind it gradually became clearer. Once the main *quirks* of finance math could be understood; understanding or modeling novel finance concepts becomes a lot more natural. Further strengthened as we worked upon this calculator. 
+
+  
+
+  **References**
+
+  * **Miron, Paul. *Pricing and Hedging Swaps*.** This book served as our primary educational resource and reference guide. It provided the foundational knowledge on pricing methods, swap valuation, and the un
 
   <br>
 
@@ -221,3 +229,7 @@
 
   - [@podledges](https://github.com/podledges) (Ayden) - Developer
   - [@Iota113](https://github.com/Iota113) (Henry) - Developer
+
+##     
+
+## 
