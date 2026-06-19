@@ -1,4 +1,4 @@
-- # SwapCalc
+ # Swap Calculator
 
   ### Interest Rate, Currency & Cross-Asset Swap Calculator
 
@@ -6,21 +6,19 @@
 
   Built using Python (Flask) and plain HTML/JS/CSS, with a strictly decoupled object-oriented backend. This is an ongoing collaborative project to actually understand how a derivative gets priced, by building the pricing engine ourselves instead of trusting a black box.
 
-  ### <br>**Contents Page**
+### <br>**Contents Page**
   - [Showcase](#showcase)
   - [What is a Swap?](#what-is-a-swap)
-  - [The Key Insight: Every Tab Bootstraps Its Own Curve](#the-key-insight-every-tab-bootstraps-its-own-curve)
   - [User Guide](#user-guide)
-    - [Installation](#installation)
+    - [Installation & Setup ⚙️](#installation--&--setup⚙️)
     - [Tab 1: Interest Rate Swap](#tab-1-interest-rate-swap)
     - [Tab 2: Currency Swap](#tab-2-currency-swap)
     - [Tab 3: Cross-Asset Swap](#tab-3-cross-asset-swap)
-  - [Known Issues](#⚠️ Known Issues)
-  - [Planned Updates](#🚀 Planned Updates)
+  - [Known Issues](#known-issues)
+  - [Planned Updates](#planned-updates)
   - [Documentation & Guides](#documentation--guides)
   - [Acknowledgments & References](#acknowledgments--references)
   - [Contributors](#contributors)
-
   <br>
 
   ## Showcase
@@ -35,7 +33,7 @@
   *Cross-Asset Swap — price a fixed funding leg against floating equity/commodity total-return legs.*
 
   ---
-
+ 🚀⚠️
   ## What is a Swap?
 
   A swap is a contract where two parties exchange interest payments on the same notional — typically, one side pays a fixed rate and the other pays a floating rate that resets against a market index. The point isn't speculation (well, not *only*); it's risk management. If you're exposed to a floating rate and you're worried it might spike, a swap lets you lock in a fixed rate instead, trading away upside for certainty.
@@ -52,8 +50,6 @@
   | **Tenor**              | How long until the swap matures.                             |
   | **Day Count Basis**    | The convention (e.g. ACT/360, ACT/365, 30/360) used to convert calendar days into accrued interest. |
   | **Payment Frequency**  | How many times a year cashflows are exchanged (e.g. semi-annual = 2x). |
-
-  ## The Key Insight: Hedging Risk with Swaps
 
   Think of a swap as like locking in a fixed price when you expect spot pricing to become extremely volatile.
 
@@ -72,7 +68,7 @@
 
   # User Guide
 
-  ## ⚙️ Installation & Setup
+  ##Installation & Setup⚙️
 
   1. Clone the repository: `git clone https://github.com/podledges/Swap-Calculator`
 
@@ -181,14 +177,14 @@
   - **Portfolio Concentration** (right panel) is currently a placeholder until you run a calculation — it's there to eventually break down your aggregate exposure by asset class (equity vs. commodity) and surface your top P&L drivers.
 
   ---
-  ## ⚠️ Known Issues
+  ##Known Issues
   - **Inconsistent naming** between swap calc and 'yield curve'
 
   - ***Minor* visual bugs** can *sometimes* be seen in the cross-asset tab.
 
     <br> 
 
-  ## 🚀 Planned Updates
+  ##Planned Updates
 
   A few things we're poking at — not promises, just where our heads are at right now:
 
@@ -214,8 +210,10 @@
 
   **Background**
 
-  *  Our first internship was both at ***Triquesta*** , where we had spent the first 2 and a half weeks reading a Masters Level Textbook about Swaps, which was an *eye-opening* experience, probably because podledges had 0 total hours spent in any Economics. Working out the  book examples were painful the 1st week or 2, when just a newbie. With constant exposure to this finance world, the intuition behind it gradually became clearer. Once the main *quirks* of finance math could be understood; understanding or modeling novel finance concepts becomes a lot more natural. Further strengthened as we worked upon this calculator. 
-
+  *  Our first internship was both at ***Triquesta*** , where we had spent the first 2 and a half weeks reading a Masters Level Textbook about Swaps. This webapp served as a way for us to apply the knowledge we learnt.
+> this was an *eye-opening* experience, probably because podledges had 0 total hours spent in any Economics. Working out the book examples were painful the 1st week or 2, when just a newbie. With constant exposure to this finance world, the intuition behind it gradually becomes clearer. Once the main *quirks* of finance math could be understood; understanding other newer finance concepts becomes a lot more natural.
+      
+    </details>
   
 
   **References**
