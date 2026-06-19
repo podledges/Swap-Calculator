@@ -10,12 +10,12 @@
   - [Showcase](#showcase)
   - [What is a Swap?](#what-is-a-swap)
   - [User Guide](#user-guide)
-    - [Installation & Setup](#installation--&--setup)
+    - [Installation & Setup⚙️](#installation--&--setup)
     - [Tab 1: Interest Rate Swap](#tab-1-interest-rate-swap)
     - [Tab 2: Currency Swap](#tab-2-currency-swap)
     - [Tab 3: Cross-Asset Swap](#tab-3-cross-asset-swap)
-  - [Known Issues](#known-issues⚠️)
-  - [Planned Updates](#planned-updates🚀)
+  - [Known Issues⚠️](#known-issues⚠️)
+  - [Planned Updates🚀](#planned-updates🚀)
   - [Documentation & Guides](#documentation--guides)
   - [Acknowledgments & References](#acknowledgments--references)
   - [Contributors](#contributors)
@@ -176,14 +176,14 @@
   - **Portfolio Concentration** (right panel) is currently a placeholder until you run a calculation — it's there to eventually break down your aggregate exposure by asset class (equity vs. commodity) and surface your top P&L drivers.
 
   ---
-  ##Known Issues⚠️
+  ## Known Issues⚠️
   - **Inconsistent naming** between swap calc and 'yield curve'
 
   - ***Minor* visual bugs** can *sometimes* be seen in the cross-asset tab.
 
     <br> 
 
-  ##Planned Updates🚀
+  ## Planned Updates🚀
 
   A few things we're poking at — not promises, just where our heads are at right now:
 
