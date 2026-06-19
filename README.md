@@ -10,7 +10,7 @@
   - [Showcase](#showcase)
   - [What is a Swap?](#what-is-a-swap)
   - [User Guide](#user-guide)
-    - [Installation & Setup ⚙️](#installation--&--setup⚙️)
+    - [Installation & Setup](#installation--&--setup)
     - [Tab 1: Interest Rate Swap](#tab-1-interest-rate-swap)
     - [Tab 2: Currency Swap](#tab-2-currency-swap)
     - [Tab 3: Cross-Asset Swap](#tab-3-cross-asset-swap)
